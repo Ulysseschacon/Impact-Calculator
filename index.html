@@ -1,0 +1,1453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Impact Calculator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<!-- Libraries for export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+  :root {
+    --bg: #f7f5f0;
+    --surface: #ffffff;
+    --surface-2: #fbfaf6;
+    --ink: #0a1929;
+    --ink-soft: #3a4a5c;
+    --muted: #6b7785;
+    --line: #e3ddd0;
+    --line-strong: #c9c1ad;
+    --accent: #0a1929;
+    --accent-soft: #1e3a52;
+    --gold: #b08d3f;
+    --positive: #2d6a4f;
+    --row-hover: #f4f1e8;
+    --shadow-sm: 0 1px 2px rgba(10, 25, 41, 0.04);
+    --shadow-md: 0 4px 16px rgba(10, 25, 41, 0.06);
+    --shadow-lg: 0 12px 40px rgba(10, 25, 41, 0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 0%, rgba(176, 141, 63, 0.04) 0%, transparent 50%),
+      radial-gradient(circle at 80% 100%, rgba(30, 58, 82, 0.04) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper {
+    position: relative;
+    z-index: 1;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+
+  /* ============ PASTE BAR ============ */
+  .paste-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 28px;
+    background: linear-gradient(to bottom, var(--surface-2), var(--surface));
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  .paste-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .paste-bar-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+    font-weight: 600;
+    margin-right: 6px;
+  }
+  .paste-bar-hint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    font-style: italic;
+  }
+  .btn-paste {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px 7px 7px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--ink);
+    transition: all 0.15s ease;
+    font-family: 'Inter', sans-serif;
+  }
+  .btn-paste:hover {
+    background: var(--ink);
+    color: #f7f5f0;
+    border-color: var(--ink);
+    transform: translateY(-1px);
+  }
+  .btn-paste:hover .col-tag {
+    background: var(--gold);
+    color: var(--ink);
+  }
+  .btn-paste .col-tag {
+    display: inline-grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    background: var(--ink);
+    color: var(--gold);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    border-radius: 3px;
+    letter-spacing: 0;
+    transition: all 0.15s;
+  }
+
+  /* ============ MODAL ============ */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 25, 41, 0.45);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+    animation: fadeIn 0.15s ease;
+  }
+  .modal-overlay.show { display: flex; }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .modal {
+    background: var(--surface);
+    border-radius: 8px;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 24px 80px rgba(10, 25, 41, 0.25);
+    animation: slideUp 0.2s ease;
+    overflow: hidden;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 24px 28px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .modal-eyebrow {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .modal-header h3 {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: var(--muted);
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px 8px;
+    border-radius: 3px;
+    transition: all 0.15s;
+  }
+  .modal-close:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .modal-body {
+    padding: 20px 28px;
+  }
+  .modal-desc {
+    color: var(--ink-soft);
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+  #pasteTextarea {
+    width: 100%;
+    min-height: 180px;
+    padding: 12px 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  #pasteTextarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(10, 25, 41, 0.08);
+  }
+  .modal-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  #pasteCount {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--gold);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .modal-replace {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    user-select: none;
+  }
+  .modal-replace input { cursor: pointer; }
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 28px 24px;
+    border-top: 1px solid var(--line);
+    background: var(--surface-2);
+  }
+
+  /* ============ HEADER ============ */
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 40px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .brand-mark {
+    width: 38px;
+    height: 38px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--ink) 0%, var(--accent-soft) 100%);
+    display: grid;
+    place-items: center;
+    color: var(--gold);
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 22px;
+  }
+  .brand-text { display: flex; flex-direction: column; }
+  .brand-text .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .brand-text .title {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .header-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    text-align: right;
+  }
+
+  /* ============ HERO ============ */
+  .hero {
+    margin-bottom: 32px;
+  }
+  .hero h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: clamp(32px, 4vw, 44px);
+    line-height: 1.1;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    max-width: 720px;
+    margin-bottom: 12px;
+  }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--gold);
+    font-weight: 500;
+  }
+  .hero p {
+    color: var(--ink-soft);
+    font-size: 16px;
+    max-width: 620px;
+  }
+
+  /* ============ INSTRUCTIONS PANEL ============ */
+  .instructions {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--gold);
+    border-radius: 4px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-sm);
+  }
+  .instructions-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .instructions-header .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--gold);
+    font-weight: 600;
+  }
+  .instructions ul {
+    list-style: none;
+    display: grid;
+    gap: 8px;
+  }
+  .instructions li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 14px;
+    color: var(--ink-soft);
+  }
+  .instructions li code {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 2px 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    color: var(--ink);
+    font-weight: 500;
+    white-space: nowrap;
+    margin-right: 4px;
+  }
+  .instructions li strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* ============ SECTION ============ */
+  .section {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+  }
+  .section-header {
+    padding: 24px 28px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 16px;
+    background: var(--surface-2);
+  }
+  .section-header .left { display: flex; flex-direction: column; gap: 4px; }
+  .section-header .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--gold);
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .section-header h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 24px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .section-header .desc {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 4px;
+  }
+
+  /* ============ TABLE ============ */
+  .table-scroll {
+    overflow-x: auto;
+  }
+  table.impact-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  table.impact-table thead th {
+    text-align: left;
+    padding: 14px 16px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line-strong);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  table.impact-table thead th.num,
+  table.impact-table tbody td.num {
+    text-align: right;
+  }
+  table.impact-table tbody td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+  }
+  table.impact-table tbody tr:hover { background: var(--row-hover); }
+  table.impact-table tbody td.row-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    width: 48px;
+    text-align: center;
+  }
+  table.impact-table input[type="number"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--ink);
+    text-align: right;
+    transition: all 0.15s ease;
+  }
+  table.impact-table input[type="number"]:hover { background: var(--bg); }
+  table.impact-table input[type="number"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(10, 25, 41, 0.08);
+  }
+  table.impact-table input::-webkit-outer-spin-button,
+  table.impact-table input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  table.impact-table input[type=number] { -moz-appearance: textfield; }
+
+  td.impact-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: right;
+    color: var(--ink);
+    padding-right: 20px !important;
+    white-space: nowrap;
+  }
+  td.impact-cell.positive { color: var(--positive); }
+  td.impact-cell.zero { color: var(--muted); }
+  td.row-actions {
+    width: 40px;
+    text-align: center;
+  }
+  .btn-remove {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    border-radius: 3px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 16px;
+    line-height: 1;
+    transition: all 0.15s;
+  }
+  .btn-remove:hover {
+    background: #f5e6e6;
+    color: #b94545;
+  }
+
+  /* ============ TABLE FOOTER / TOTAL ============ */
+  .table-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 28px;
+    background: var(--surface-2);
+    border-top: 1px solid var(--line);
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .table-footer .left {
+    display: flex;
+    gap: 10px;
+  }
+  .total-box {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .total-box .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .total-box .value {
+    font-family: 'Fraunces', serif;
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .total-box .value.positive { color: var(--positive); }
+
+  /* ============ COPILOT PANEL ============ */
+  .copilot {
+    padding: 32px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+  @media (max-width: 760px) {
+    .copilot { grid-template-columns: 1fr; }
+  }
+  .copilot-input {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .copilot-input label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .copilot-input input {
+    width: 100%;
+    padding: 16px 18px;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    color: var(--ink);
+    background: var(--surface);
+    transition: all 0.15s;
+  }
+  .copilot-input input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(10, 25, 41, 0.08);
+  }
+  .copilot-input .formula-note {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    padding: 12px 14px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    border-left: 2px solid var(--line-strong);
+    line-height: 1.6;
+  }
+  .copilot-input .formula-note strong { color: var(--ink); font-weight: 600; }
+
+  .copilot-result {
+    background: linear-gradient(135deg, var(--ink) 0%, var(--accent-soft) 100%);
+    padding: 32px;
+    border-radius: 6px;
+    color: #f7f5f0;
+    position: relative;
+    overflow: hidden;
+    min-height: 180px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .copilot-result::before {
+    content: '';
+    position: absolute;
+    top: -40px;
+    right: -40px;
+    width: 180px;
+    height: 180px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(176, 141, 63, 0.15) 0%, transparent 70%);
+  }
+  .copilot-result .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-weight: 600;
+    position: relative;
+  }
+  .copilot-result .value {
+    font-family: 'Fraunces', serif;
+    font-size: 44px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    position: relative;
+  }
+  .copilot-result .breakdown {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(247, 245, 240, 0.7);
+    line-height: 1.7;
+    position: relative;
+  }
+
+  /* ============ BUTTONS ============ */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 4px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    color: var(--ink);
+    transition: all 0.15s ease;
+    letter-spacing: 0.01em;
+  }
+  .btn:hover { background: var(--surface-2); border-color: var(--ink); transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn.btn-primary {
+    background: var(--ink);
+    color: #f7f5f0;
+    border-color: var(--ink);
+  }
+  .btn.btn-primary:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
+  .btn.btn-ghost {
+    background: transparent;
+    border-color: var(--line);
+  }
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* ============ FINAL ACTIONS BAR ============ */
+  .actions-bar {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 24px 28px;
+    box-shadow: var(--shadow-md);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+  .actions-bar .summary {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+  .summary-item .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .summary-item .value {
+    font-family: 'Fraunces', serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .summary-item.grand .value { color: var(--gold); font-size: 26px; }
+
+  /* ============ FOOTER ============ */
+  footer {
+    margin-top: 60px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  /* ============ TOAST ============ */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--ink);
+    color: #f7f5f0;
+    padding: 14px 20px;
+    border-radius: 4px;
+    font-size: 13px;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.25s ease;
+    pointer-events: none;
+    z-index: 999;
+    font-weight: 500;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+
+  @media (max-width: 640px) {
+    .wrapper { padding: 24px 16px 60px; }
+    header { flex-direction: column; align-items: flex-start; gap: 16px; }
+    .header-meta { text-align: left; }
+    table.impact-table thead th, table.impact-table tbody td { padding: 8px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark">I</div>
+      <div class="brand-text">
+        <span class="eyebrow">CSP / EA Renewals</span>
+        <span class="title">Impact Calculator</span>
+      </div>
+    </div>
+    <div class="header-meta" id="dateStamp">—</div>
+  </header>
+
+  <section class="hero">
+    <h1>Quantify the <em>customer impact</em> of your Microsoft licensing proposals.</h1>
+    <p>Enter MSRP, customer purchase price, and quantity per line. Combine with Copilot productivity savings for a complete value story.</p>
+  </section>
+
+  <!-- Instructions -->
+  <div class="instructions">
+    <div class="instructions-header">
+      <span class="label">Instructions / Data Source</span>
+    </div>
+    <ul>
+      <li><span><strong>MSRP Price</strong> — copy variables from <code>Column H</code> of the MS Configurator.</span></li>
+      <li><span><strong>Customer Purchase Price</strong> — copy variables from <code>Column S</code> of the MS Configurator.</span></li>
+      <li><span><strong>Qty</strong> — copy variables from <code>Column X</code> of the MS Configurator.</span></li>
+    </ul>
+  </div>
+
+  <!-- ===== Section 1: Impact Table ===== -->
+  <div class="section" id="impactSection">
+    <div class="section-header">
+      <div class="left">
+        <span class="num">Section 01</span>
+        <h2>Licensing Impact</h2>
+        <span class="desc">Impact = (MSRP &minus; Customer Purchase Price) &times; Qty</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="addRowBtn">＋ Add Line</button>
+        <button class="btn btn-ghost" id="clearBtn">Reset All</button>
+      </div>
+    </div>
+
+    <!-- Paste bar -->
+    <div class="paste-bar">
+      <div class="paste-bar-left">
+        <span class="paste-bar-label">Paste from MS Configurator →</span>
+        <button class="btn btn-paste" data-paste-col="msrp">
+          <span class="col-tag">H</span> Paste MSRP
+        </button>
+        <button class="btn btn-paste" data-paste-col="price">
+          <span class="col-tag">S</span> Paste Customer Price
+        </button>
+        <button class="btn btn-paste" data-paste-col="qty">
+          <span class="col-tag">X</span> Paste Qty
+        </button>
+      </div>
+      <span class="paste-bar-hint">Tip: you can also paste a column directly into any cell</span>
+    </div>
+
+    <div class="table-scroll">
+      <table class="impact-table" id="impactTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th class="num">MSRP Price</th>
+            <th class="num">Customer Purchase Price</th>
+            <th class="num">Qty</th>
+            <th class="num">Impact</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+
+    <div class="table-footer">
+      <div class="left">
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.05em;">
+          <span id="lineCount">0</span> line items
+        </span>
+      </div>
+      <div class="total-box">
+        <span class="label">Total Impact</span>
+        <span class="value" id="totalImpact">$0.00</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Section 2: Copilot Productivity Savings ===== -->
+  <div class="section">
+    <div class="section-header">
+      <div class="left">
+        <span class="num">Section 02</span>
+        <h2>Copilot Productivity Savings</h2>
+        <span class="desc">Enter the number of Microsoft 365 Copilot licenses to project annual productivity value.</span>
+      </div>
+    </div>
+
+    <div class="copilot">
+      <div class="copilot-input">
+        <label for="copilotQty">Qty of Microsoft 365 Copilot Licenses</label>
+        <input type="number" id="copilotQty" min="0" step="1" placeholder="e.g. 270" />
+        <div class="formula-note">
+          <strong>Formula:</strong> Qty × $3,561.60<br>
+          <strong>Based on:</strong><br>
+          &nbsp;&nbsp;• 70% adoption rate<br>
+          &nbsp;&nbsp;• 8 hrs/month productivity savings<br>
+          &nbsp;&nbsp;• $53/hr average salary
+        </div>
+      </div>
+      <div class="copilot-result">
+        <span class="label">Total Productivity Savings Value</span>
+        <span class="value" id="copilotTotal">$0.00</span>
+        <span class="breakdown" id="copilotBreakdown">0 licenses × $3,561.60</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Grand Total + Export ===== -->
+  <div class="actions-bar">
+    <div class="summary">
+      <div class="summary-item">
+        <span class="label">Licensing Impact</span>
+        <span class="value" id="summaryImpact">$0.00</span>
+      </div>
+      <div class="summary-item">
+        <span class="label">Copilot Savings</span>
+        <span class="value" id="summaryCopilot">$0.00</span>
+      </div>
+      <div class="summary-item grand">
+        <span class="label">Grand Total</span>
+        <span class="value" id="grandTotal">$0.00</span>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" id="exportExcelBtn">⤓ Export Excel</button>
+      <button class="btn btn-primary" id="exportPdfBtn">⤓ Export PDF</button>
+    </div>
+  </div>
+
+  <footer>
+    <span>Impact Calculator · For internal proposal use</span>
+    <span id="footerStamp">v1.0</span>
+  </footer>
+
+</div>
+
+<!-- Paste Modal -->
+<div class="modal-overlay" id="pasteModal" aria-hidden="true">
+  <div class="modal" role="dialog" aria-labelledby="pasteModalTitle">
+    <div class="modal-header">
+      <div>
+        <span class="modal-eyebrow" id="pasteModalEyebrow">Column</span>
+        <h3 id="pasteModalTitle">Paste Column</h3>
+      </div>
+      <button class="modal-close" id="pasteModalClose" aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-desc" id="pasteModalDesc">Copy the column from your MS Configurator spreadsheet and paste it below. One value per line.</p>
+      <textarea id="pasteTextarea" placeholder="Paste values here (one per line)…&#10;e.g.&#10;96&#10;156&#10;480&#10;0&#10;684" autofocus></textarea>
+      <div class="modal-meta">
+        <span id="pasteCount">0 values detected</span>
+        <label class="modal-replace">
+          <input type="checkbox" id="pasteReplace" checked>
+          Replace existing values in this column
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="pasteCancel">Cancel</button>
+      <button class="btn btn-primary" id="pasteConfirm">Apply</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">Saved</div>
+
+<script>
+/* =========================================================
+   Impact Calculator — vanilla JS, no persistence
+   ========================================================= */
+
+const COPILOT_MULTIPLIER = 3561.60;
+let rowCounter = 0;
+
+// --- Date stamp ---
+const today = new Date();
+const fmtDate = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+document.getElementById('dateStamp').textContent = fmtDate.toUpperCase();
+document.getElementById('footerStamp').textContent = 'Generated ' + fmtDate;
+
+// --- Currency formatter ---
+const fmtCurrency = (n) => {
+  if (!isFinite(n)) n = 0;
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+// --- Toast ---
+const toast = (msg) => {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+};
+
+// --- Add a row to the impact table ---
+function addRow(msrp = '', price = '', qty = '') {
+  rowCounter++;
+  const tbody = document.getElementById('tableBody');
+  const tr = document.createElement('tr');
+  tr.dataset.rowId = rowCounter;
+  tr.innerHTML = `
+    <td class="row-num">${tbody.children.length + 1}</td>
+    <td class="num"><input type="number" class="msrp" data-col="msrp" step="0.01" min="0" placeholder="0.00" value="${msrp}" /></td>
+    <td class="num"><input type="number" class="price" data-col="price" step="0.01" min="0" placeholder="0.00" value="${price}" /></td>
+    <td class="num"><input type="number" class="qty" data-col="qty" step="1" min="0" placeholder="0" value="${qty}" /></td>
+    <td class="impact-cell zero" data-impact>$0.00</td>
+    <td class="row-actions"><button class="btn-remove" title="Remove line" aria-label="Remove line">×</button></td>
+  `;
+  tbody.appendChild(tr);
+
+  tr.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', recalc);
+    inp.addEventListener('paste', handleCellPaste);
+  });
+  tr.querySelector('.btn-remove').addEventListener('click', () => {
+    tr.remove();
+    renumberRows();
+    recalc();
+  });
+
+  recalc();
+}
+
+function renumberRows() {
+  document.querySelectorAll('#tableBody tr').forEach((tr, idx) => {
+    tr.querySelector('.row-num').textContent = idx + 1;
+  });
+}
+
+// --- Recalculate impact totals ---
+function recalc() {
+  let total = 0;
+  document.querySelectorAll('#tableBody tr').forEach(tr => {
+    const msrp = parseFloat(tr.querySelector('.msrp').value) || 0;
+    const price = parseFloat(tr.querySelector('.price').value) || 0;
+    const qty = parseFloat(tr.querySelector('.qty').value) || 0;
+    const impact = (msrp - price) * qty;
+    total += impact;
+    const cell = tr.querySelector('[data-impact]');
+    cell.textContent = fmtCurrency(impact);
+    cell.classList.remove('positive', 'zero');
+    if (impact > 0) cell.classList.add('positive');
+    else if (impact === 0) cell.classList.add('zero');
+  });
+
+  document.getElementById('lineCount').textContent = document.querySelectorAll('#tableBody tr').length;
+
+  const totalEl = document.getElementById('totalImpact');
+  totalEl.textContent = fmtCurrency(total);
+  totalEl.classList.toggle('positive', total > 0);
+
+  document.getElementById('summaryImpact').textContent = fmtCurrency(total);
+  updateGrandTotal();
+}
+
+// --- Copilot calculation ---
+function recalcCopilot() {
+  const qty = parseFloat(document.getElementById('copilotQty').value) || 0;
+  const value = qty * COPILOT_MULTIPLIER;
+  document.getElementById('copilotTotal').textContent = fmtCurrency(value);
+  document.getElementById('copilotBreakdown').textContent = `${qty.toLocaleString()} licenses × $3,561.60`;
+  document.getElementById('summaryCopilot').textContent = fmtCurrency(value);
+  updateGrandTotal();
+}
+
+function updateGrandTotal() {
+  const impact = parseCurrency(document.getElementById('summaryImpact').textContent);
+  const copilot = parseCurrency(document.getElementById('summaryCopilot').textContent);
+  document.getElementById('grandTotal').textContent = fmtCurrency(impact + copilot);
+}
+function parseCurrency(str) {
+  return parseFloat(String(str).replace(/[^0-9.-]/g, '')) || 0;
+}
+
+// --- Reset everything ---
+function resetAll() {
+  if (!confirm('Clear all entries and start a new scenario?')) return;
+  document.getElementById('tableBody').innerHTML = '';
+  document.getElementById('copilotQty').value = '';
+  for (let i = 0; i < 15; i++) addRow();
+  recalcCopilot();
+  toast('Reset complete');
+}
+
+// --- Gather data for export ---
+function gatherData() {
+  const rows = [];
+  document.querySelectorAll('#tableBody tr').forEach((tr, idx) => {
+    const msrp = parseFloat(tr.querySelector('.msrp').value) || 0;
+    const price = parseFloat(tr.querySelector('.price').value) || 0;
+    const qty = parseFloat(tr.querySelector('.qty').value) || 0;
+    const impact = (msrp - price) * qty;
+    // skip fully empty rows on export
+    if (msrp === 0 && price === 0 && qty === 0) return;
+    rows.push({ line: idx + 1, msrp, price, qty, impact });
+  });
+  const totalImpact = rows.reduce((s, r) => s + r.impact, 0);
+  const copilotQty = parseFloat(document.getElementById('copilotQty').value) || 0;
+  const copilotValue = copilotQty * COPILOT_MULTIPLIER;
+  return { rows, totalImpact, copilotQty, copilotValue, grandTotal: totalImpact + copilotValue };
+}
+
+// --- Export to Excel ---
+function exportExcel() {
+  const data = gatherData();
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Licensing Impact
+  const sheet1 = [
+    ['Impact Calculator — Licensing Impact'],
+    ['Generated:', fmtDate],
+    [],
+    ['Line', 'MSRP Price', 'Customer Purchase Price', 'Qty', 'Impact']
+  ];
+  data.rows.forEach(r => {
+    sheet1.push([r.line, r.msrp, r.price, r.qty, r.impact]);
+  });
+  sheet1.push([]);
+  sheet1.push(['', '', '', 'TOTAL IMPACT', data.totalImpact]);
+
+  const ws1 = XLSX.utils.aoa_to_sheet(sheet1);
+  ws1['!cols'] = [{ wch: 8 }, { wch: 14 }, { wch: 24 }, { wch: 10 }, { wch: 18 }];
+  // currency formatting
+  const startRow = 5; // 1-indexed; data starts at row 5
+  for (let i = 0; i < data.rows.length; i++) {
+    ['B', 'C', 'E'].forEach(col => {
+      const ref = col + (startRow + i);
+      if (ws1[ref]) ws1[ref].z = '"$"#,##0.00';
+    });
+  }
+  const totalRow = startRow + data.rows.length + 1;
+  if (ws1['E' + totalRow]) ws1['E' + totalRow].z = '"$"#,##0.00';
+
+  XLSX.utils.book_append_sheet(wb, ws1, 'Licensing Impact');
+
+  // Sheet 2: Copilot Productivity Savings
+  const sheet2 = [
+    ['Copilot Productivity Savings'],
+    ['Generated:', fmtDate],
+    [],
+    ['Assumption', 'Value'],
+    ['Adoption rate', '70%'],
+    ['Monthly hourly productivity savings', '8 hours'],
+    ['Average annual salary', '$53/hour'],
+    ['Multiplier per license', COPILOT_MULTIPLIER],
+    [],
+    ['Qty of Copilot Licenses', data.copilotQty],
+    ['Total Impact of Productivity Savings', data.copilotValue]
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(sheet2);
+  ws2['!cols'] = [{ wch: 38 }, { wch: 18 }];
+  if (ws2['B8']) ws2['B8'].z = '"$"#,##0.00';
+  if (ws2['B11']) ws2['B11'].z = '"$"#,##0.00';
+  XLSX.utils.book_append_sheet(wb, ws2, 'Copilot Savings');
+
+  // Sheet 3: Summary
+  const sheet3 = [
+    ['Impact Summary'],
+    ['Generated:', fmtDate],
+    [],
+    ['Category', 'Amount'],
+    ['Licensing Impact', data.totalImpact],
+    ['Copilot Productivity Savings', data.copilotValue],
+    ['Grand Total', data.grandTotal]
+  ];
+  const ws3 = XLSX.utils.aoa_to_sheet(sheet3);
+  ws3['!cols'] = [{ wch: 32 }, { wch: 20 }];
+  ['B5', 'B6', 'B7'].forEach(r => { if (ws3[r]) ws3[r].z = '"$"#,##0.00'; });
+  XLSX.utils.book_append_sheet(wb, ws3, 'Summary');
+
+  const stamp = today.toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `Impact_Calculator_${stamp}.xlsx`);
+  toast('Excel exported');
+}
+
+// --- Export to PDF ---
+function exportPDF() {
+  const data = gatherData();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+
+  const ink = [10, 25, 41];
+  const gold = [176, 141, 63];
+  const muted = [107, 119, 133];
+
+  // Header
+  doc.setFillColor(...ink);
+  doc.rect(0, 0, 612, 70, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(247, 245, 240);
+  doc.text('Impact Calculator', 40, 38);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...gold);
+  doc.text('CSP / EA RENEWALS', 40, 54);
+  doc.setTextColor(247, 245, 240);
+  doc.text(fmtDate, 572, 38, { align: 'right' });
+
+  let y = 100;
+
+  // Section 1: Licensing Impact
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...ink);
+  doc.text('Licensing Impact', 40, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...muted);
+  doc.text('Impact = (MSRP − Customer Purchase Price) × Qty', 40, y + 14);
+  y += 30;
+
+  if (data.rows.length === 0) {
+    doc.setFontSize(10);
+    doc.setTextColor(...muted);
+    doc.text('No line items entered.', 40, y);
+    y += 30;
+  } else {
+    const body = data.rows.map(r => [
+      r.line,
+      fmtCurrency(r.msrp),
+      fmtCurrency(r.price),
+      r.qty.toLocaleString(),
+      fmtCurrency(r.impact)
+    ]);
+    doc.autoTable({
+      startY: y,
+      head: [['#', 'MSRP Price', 'Customer Purchase Price', 'Qty', 'Impact']],
+      body: body,
+      foot: [['', '', '', 'TOTAL IMPACT', fmtCurrency(data.totalImpact)]],
+      theme: 'plain',
+      styles: { font: 'helvetica', fontSize: 9, cellPadding: 6, textColor: ink },
+      headStyles: { fillColor: [251, 250, 246], textColor: muted, fontStyle: 'bold', fontSize: 8, lineWidth: { bottom: 1 }, lineColor: [201, 193, 173] },
+      footStyles: { fillColor: [251, 250, 246], textColor: ink, fontStyle: 'bold', lineWidth: { top: 1 }, lineColor: [201, 193, 173] },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 30 },
+        1: { halign: 'right' },
+        2: { halign: 'right' },
+        3: { halign: 'right' },
+        4: { halign: 'right', fontStyle: 'bold' }
+      },
+      margin: { left: 40, right: 40 }
+    });
+    y = doc.lastAutoTable.finalY + 24;
+  }
+
+  // Section 2: Copilot
+  if (y > 620) { doc.addPage(); y = 60; }
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...ink);
+  doc.text('Copilot Productivity Savings', 40, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...muted);
+  doc.text('Qty × $3,561.60 (70% adoption × 8 hrs/month × $53/hr)', 40, y + 14);
+  y += 30;
+
+  doc.autoTable({
+    startY: y,
+    body: [
+      ['Qty of Copilot Licenses', data.copilotQty.toLocaleString()],
+      ['Multiplier per License', fmtCurrency(COPILOT_MULTIPLIER)],
+      ['Total Productivity Savings Value', fmtCurrency(data.copilotValue)]
+    ],
+    theme: 'plain',
+    styles: { font: 'helvetica', fontSize: 10, cellPadding: 8, textColor: ink },
+    columnStyles: {
+      0: { fontStyle: 'normal', textColor: muted },
+      1: { halign: 'right', fontStyle: 'bold' }
+    },
+    margin: { left: 40, right: 40 },
+    didParseCell: (data) => {
+      if (data.row.index === 2) {
+        data.cell.styles.fillColor = [251, 250, 246];
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.textColor = ink;
+      }
+    }
+  });
+  y = doc.lastAutoTable.finalY + 30;
+
+  // Grand Total
+  if (y > 680) { doc.addPage(); y = 60; }
+  doc.setFillColor(...ink);
+  doc.rect(40, y, 532, 80, 'F');
+  doc.setTextColor(...gold);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text('GRAND TOTAL IMPACT', 60, y + 22);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(247, 245, 240);
+  doc.text(`Licensing Impact:  ${fmtCurrency(data.totalImpact)}`, 60, y + 40);
+  doc.text(`Copilot Savings:   ${fmtCurrency(data.copilotValue)}`, 60, y + 54);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(...gold);
+  doc.text(fmtCurrency(data.grandTotal), 552, y + 52, { align: 'right' });
+
+  // Footer
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...muted);
+    doc.text(`Impact Calculator · Generated ${fmtDate}`, 40, 770);
+    doc.text(`Page ${i} of ${pageCount}`, 572, 770, { align: 'right' });
+  }
+
+  const stamp = today.toISOString().slice(0, 10);
+  doc.save(`Impact_Calculator_${stamp}.pdf`);
+  toast('PDF exported');
+}
+
+// --- Parse pasted column data ---
+// Accepts newline-separated values, tab-separated single rows, and currency-formatted values
+// IMPORTANT: blank lines are preserved as 0 (an empty Qty cell in the source must NOT shift subsequent rows up)
+function parsePastedColumn(text) {
+  if (!text) return [];
+  // Split on newlines only — preserves positional integrity
+  let lines = text.split(/\r?\n/);
+  // Trim trailing empty lines (Excel often appends a final newline), but keep internal blanks
+  while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+  return lines.map(line => {
+    const trimmed = line.trim();
+    if (trimmed === '') return 0;
+    // strip currency symbols, commas, spaces, percent signs
+    const cleaned = trimmed.replace(/[$,\s%]/g, '');
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  });
+}
+
+// --- Fill a column with pasted values, expanding rows as needed ---
+function fillColumn(colName, values, replace = true) {
+  const tbody = document.getElementById('tableBody');
+  // Ensure enough rows exist
+  while (tbody.children.length < values.length) addRow();
+
+  const rows = tbody.querySelectorAll('tr');
+  values.forEach((val, i) => {
+    const input = rows[i].querySelector(`input[data-col="${colName}"]`);
+    if (!input) return;
+    if (replace || !input.value) {
+      input.value = val;
+    }
+  });
+  recalc();
+}
+
+// --- In-cell paste: if user pastes multi-line content into a single cell, fill the column from that row ---
+function handleCellPaste(e) {
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (!text) return;
+  // Detect multi-line paste WITHOUT filtering blanks (we need to preserve positional integrity)
+  // Split, drop only trailing empty lines, then check if there's more than one entry
+  let rawLines = text.split(/\r?\n/);
+  while (rawLines.length > 0 && rawLines[rawLines.length - 1].trim() === '') rawLines.pop();
+  if (rawLines.length <= 1) return; // single value — let native paste behavior handle it
+
+  e.preventDefault();
+  const input = e.target;
+  const colName = input.dataset.col;
+  const startRow = input.closest('tr');
+  const tbody = document.getElementById('tableBody');
+  const allRows = Array.from(tbody.children);
+  const startIdx = allRows.indexOf(startRow);
+
+  const values = parsePastedColumn(text);
+  // Ensure enough rows from startIdx onward
+  while (tbody.children.length < startIdx + values.length) addRow();
+  const updatedRows = tbody.querySelectorAll('tr');
+  values.forEach((val, i) => {
+    const cell = updatedRows[startIdx + i].querySelector(`input[data-col="${colName}"]`);
+    if (cell) cell.value = val;
+  });
+  recalc();
+  toast(`Pasted ${values.length} values`);
+}
+
+// --- Modal: paste column ---
+const COL_META = {
+  msrp:  { name: 'MSRP Price',              tag: 'H', desc: 'Copy Column H from the MS Configurator and paste below. One value per line.' },
+  price: { name: 'Customer Purchase Price', tag: 'S', desc: 'Copy Column S from the MS Configurator and paste below. One value per line.' },
+  qty:   { name: 'Qty',                     tag: 'X', desc: 'Copy Column X from the MS Configurator and paste below. One value per line.' }
+};
+let activePasteCol = null;
+
+function openPasteModal(colName) {
+  activePasteCol = colName;
+  const meta = COL_META[colName];
+  document.getElementById('pasteModalEyebrow').textContent = `Column ${meta.tag} → ${meta.name}`;
+  document.getElementById('pasteModalTitle').textContent = `Paste ${meta.name}`;
+  document.getElementById('pasteModalDesc').textContent = meta.desc;
+  document.getElementById('pasteTextarea').value = '';
+  document.getElementById('pasteCount').textContent = '0 values detected';
+  document.getElementById('pasteReplace').checked = true;
+  document.getElementById('pasteModal').classList.add('show');
+  setTimeout(() => document.getElementById('pasteTextarea').focus(), 50);
+}
+function closePasteModal() {
+  document.getElementById('pasteModal').classList.remove('show');
+  activePasteCol = null;
+}
+function applyPasteModal() {
+  const text = document.getElementById('pasteTextarea').value;
+  const values = parsePastedColumn(text);
+  if (values.length === 0) { toast('No values detected'); return; }
+  const replace = document.getElementById('pasteReplace').checked;
+  fillColumn(activePasteCol, values, replace);
+  toast(`Pasted ${values.length} values into ${COL_META[activePasteCol].name}`);
+  closePasteModal();
+}
+
+// --- Wire up events ---
+document.getElementById('addRowBtn').addEventListener('click', () => addRow());
+document.getElementById('clearBtn').addEventListener('click', resetAll);
+document.getElementById('copilotQty').addEventListener('input', recalcCopilot);
+document.getElementById('exportExcelBtn').addEventListener('click', exportExcel);
+document.getElementById('exportPdfBtn').addEventListener('click', exportPDF);
+
+document.querySelectorAll('[data-paste-col]').forEach(btn => {
+  btn.addEventListener('click', () => openPasteModal(btn.dataset.pasteCol));
+});
+document.getElementById('pasteModalClose').addEventListener('click', closePasteModal);
+document.getElementById('pasteCancel').addEventListener('click', closePasteModal);
+document.getElementById('pasteConfirm').addEventListener('click', applyPasteModal);
+document.getElementById('pasteModal').addEventListener('click', (e) => {
+  if (e.target.id === 'pasteModal') closePasteModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.getElementById('pasteModal').classList.contains('show')) {
+    closePasteModal();
+  }
+});
+document.getElementById('pasteTextarea').addEventListener('input', (e) => {
+  const count = parsePastedColumn(e.target.value).length;
+  document.getElementById('pasteCount').textContent = `${count} value${count === 1 ? '' : 's'} detected`;
+});
+
+// --- Init with 15 empty rows ---
+for (let i = 0; i < 15; i++) addRow();
+recalcCopilot();
+</script>
+</body>
+</html>

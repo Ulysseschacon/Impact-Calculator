@@ -744,6 +744,43 @@
   }
   .summary-item.grand .value { color: var(--gold); font-size: 26px; }
 
+  .export-controls {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .customer-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 220px;
+  }
+  .customer-field label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .customer-field input {
+    padding: 9px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 4px;
+    background: var(--surface);
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+    transition: all 0.15s;
+    min-width: 220px;
+  }
+  .customer-field input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(10, 25, 41, 0.08);
+  }
+
   /* ============ FOOTER ============ */
   footer {
     margin-top: 60px;
@@ -926,9 +963,15 @@
         <span class="value" id="grandTotal">$0.00</span>
       </div>
     </div>
-    <div class="btn-row">
-      <button class="btn" id="exportExcelBtn">⤓ Export Excel</button>
-      <button class="btn btn-primary" id="exportPdfBtn">⤓ Export PDF</button>
+    <div class="export-controls">
+      <div class="customer-field">
+        <label for="customerName">Customer Name</label>
+        <input type="text" id="customerName" placeholder="e.g. Contoso Corp" maxlength="80" autocomplete="off" />
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="exportExcelBtn">⤓ Export Excel</button>
+        <button class="btn btn-primary" id="exportPdfBtn">⤓ Export PDF</button>
+      </div>
     </div>
   </div>
 
@@ -1082,9 +1125,29 @@ function resetAll() {
   if (!confirm('Clear all entries and start a new scenario?')) return;
   document.getElementById('tableBody').innerHTML = '';
   document.getElementById('copilotQty').value = '';
+  document.getElementById('customerName').value = '';
   for (let i = 0; i < 15; i++) addRow();
   recalcCopilot();
   toast('Reset complete');
+}
+
+// --- Customer name helpers ---
+function getCustomerName() {
+  return (document.getElementById('customerName').value || '').trim();
+}
+function buildFilename(ext) {
+  const stamp = today.toISOString().slice(0, 10);
+  const customer = getCustomerName();
+  if (customer) {
+    // sanitize for filesystem use — strip characters Windows/Mac/Linux dislike
+    const safe = customer.replace(/[\\/:*?"<>|]/g, '').trim();
+    return `${safe} Impact Calculator_${stamp}.${ext}`;
+  }
+  return `Impact_Calculator_${stamp}.${ext}`;
+}
+function buildHeaderTitle() {
+  const customer = getCustomerName();
+  return customer ? `${customer} Impact Calculator` : 'Impact Calculator';
 }
 
 // --- Gather data for export ---
@@ -1109,10 +1172,11 @@ function gatherData() {
 function exportExcel() {
   const data = gatherData();
   const wb = XLSX.utils.book_new();
+  const headerTitle = buildHeaderTitle();
 
   // Sheet 1: Licensing Impact
   const sheet1 = [
-    ['Impact Calculator — Licensing Impact'],
+    [`${headerTitle} — Licensing Impact`],
     ['Generated:', fmtDate],
     [],
     ['Line', 'MSRP Price', 'Customer Purchase Price', 'Qty', 'Impact']
@@ -1140,7 +1204,7 @@ function exportExcel() {
 
   // Sheet 2: Copilot Productivity Savings
   const sheet2 = [
-    ['Copilot Productivity Savings'],
+    [`${headerTitle} — Copilot Productivity Savings`],
     ['Generated:', fmtDate],
     [],
     ['Assumption', 'Value'],
@@ -1160,7 +1224,7 @@ function exportExcel() {
 
   // Sheet 3: Summary
   const sheet3 = [
-    ['Impact Summary'],
+    [`${headerTitle} — Summary`],
     ['Generated:', fmtDate],
     [],
     ['Category', 'Amount'],
@@ -1173,8 +1237,7 @@ function exportExcel() {
   ['B5', 'B6', 'B7'].forEach(r => { if (ws3[r]) ws3[r].z = '"$"#,##0.00'; });
   XLSX.utils.book_append_sheet(wb, ws3, 'Summary');
 
-  const stamp = today.toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `Impact_Calculator_${stamp}.xlsx`);
+  XLSX.writeFile(wb, buildFilename('xlsx'));
   toast('Excel exported');
 }
 
@@ -1194,7 +1257,7 @@ function exportPDF() {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(20);
   doc.setTextColor(247, 245, 240);
-  doc.text('Impact Calculator', 40, 38);
+  doc.text(buildHeaderTitle(), 40, 38);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...gold);
@@ -1310,12 +1373,11 @@ function exportPDF() {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(...muted);
-    doc.text(`Impact Calculator · Generated ${fmtDate}`, 40, 770);
+    doc.text(`${buildHeaderTitle()} · Generated ${fmtDate}`, 40, 770);
     doc.text(`Page ${i} of ${pageCount}`, 572, 770, { align: 'right' });
   }
 
-  const stamp = today.toISOString().slice(0, 10);
-  doc.save(`Impact_Calculator_${stamp}.pdf`);
+  doc.save(buildFilename('pdf'));
   toast('PDF exported');
 }
 
